@@ -1,73 +1,81 @@
-import React, { useState } from "react";
-import ProductFilters1 from "./ProductFilters1";
-import productsData from "./ProductsData";
+import React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useGetProductsQuery } from "../../redux/productSlice"; // Import the Redux hook
+import ProductCard from "./ProductCard";
+import SkeletonCard from "./SkeletonCard";
 
 const ProductPage = () => {
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filteredProducts, setFilteredProducts] = useState(productsData);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const applyFilter = (category, option) => {
-    const filtered = productsData.filter((product) => {
-      const normalize = (str) => str?.toLowerCase().trim();
+  // Use the Redux hook to fetch data. It automatically handles loading, error, and data states.
+  const { data, isLoading, isError, error } = useGetProductsQuery(location.search);
 
-      switch (category) {
-        case "Color":
-          return normalize(product.color) === normalize(option);
-        case "Brands":
-          return normalize(product.brand) === normalize(option);
-        case "Material":
-          return normalize(product.material) === normalize(option);
-        case "Category":
-          return normalize(product.category) === normalize(option);
-        case "Ratings":
-          return normalize(product.rating) === normalize(option);
-        case "Price":
-          if (option === "Under ₹500") return product.price < 500;
-          if (option === "₹500–₹1000") return product.price >= 500 && product.price <= 1000;
-          if (option === "₹1000–₹2000") return product.price > 1000 && product.price <= 2000;
-          if (option === "Above ₹2000") return product.price > 2000;
-          return true;
-        default:
-          return true;
-      }
-    });
+  // Extract products and pagination from the hook's return value
+  const products = data?.data || [];
+  const pagination = data?.pagination;
 
-    console.log("Filtered products:", filtered);
-    setFilteredProducts(filtered);
+  const handlePageChange = (newPage) => {
+    if (!pagination || newPage < 1 || newPage > pagination.totalPages) return;
+    const params = new URLSearchParams(location.search);
+    params.set('page', newPage);
+    navigate(`${location.pathname}?${params.toString()}`);
   };
 
-  return (
-    <div className="p-6">
-      <button
-        onClick={() => setIsFilterOpen(true)}
-        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-      >
-        Open Filters
-      </button>
-
-      <ProductFilters1
-        isFilterOpen={isFilterOpen}
-        closeFilter={() => setIsFilterOpen(false)}
-        applyFilter={applyFilter}
-      />
-
-      <div className="grid grid-cols-3 gap-4 mt-6">
-        {filteredProducts.length === 0 ? (
-          <p className="text-center col-span-full text-gray-500">No products found for selected filter.</p>
-        ) : (
-          filteredProducts.map((product) => (
-            <div key={product.id} className="border p-4 rounded shadow-sm">
-              <h4 className="font-semibold text-lg">{product.name}</h4>
-              <p>Color: {product.color}</p>
-              <p>Brand: {product.brand}</p>
-              <p>Material: {product.material}</p>
-              <p>Category: {product.category}</p>
-              <p>Rating: {product.rating}</p>
-              <p>Price: ₹{product.price}</p>
-            </div>
-          ))
-        )}
+  const renderPagination = () => {
+    if (!pagination || !pagination.totalPages || pagination.totalPages <= 1) return null;
+    return (
+      <div className="flex justify-center items-center space-x-4 mt-8">
+        <button
+          onClick={() => handlePageChange(pagination.page - 1)}
+          disabled={pagination.page === 1}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span className="font-semibold">
+          Page {pagination.page} of {pagination.totalPages}
+        </span>
+        <button
+          onClick={() => handlePageChange(pagination.page + 1)}
+          disabled={pagination.page === pagination.totalPages}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+        >
+          Next
+        </button>
       </div>
+    );
+  };
+
+  let content;
+
+  if (isLoading) {
+    content = (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {Array(8).fill(0).map((_, index) => <SkeletonCard key={index} />)}
+      </div>
+    );
+  } else if (isError) {
+    content = <p className="text-center text-red-500 text-lg">Error: {error.toString()}</p>;
+  } else if (products.length > 0) {
+    content = (
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {products.map((product) => (
+            <ProductCard key={product._id} product={product} />
+          ))}
+        </div>
+        {renderPagination()}
+      </>
+    );
+  } else {
+    content = <p className="text-center text-gray-500 text-lg">No products found.</p>;
+  }
+
+  return (
+    <div className="p-4 md:p-8">
+      <h1 className="text-3xl font-bold text-center mb-8">Explore Our Collection</h1>
+      <main className="w-full max-w-7xl mx-auto">{content}</main>
     </div>
   );
 };

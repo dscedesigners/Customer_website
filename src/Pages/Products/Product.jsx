@@ -1,131 +1,170 @@
-import React, { useState } from "react";
-import { FaBars, FaTimes } from "react-icons/fa"; // Import icons
-import Nav from "../../Components/Nav";
-import Footer from "../../Components/Footter"; // Ensure correct import
-import ProductFiltersPC from "./ProductFiltersPC";
-import ProductFiltersMobile from "./ProductFiltersMobile";
-import ProductCard from "./ProductCard"; // Product card component
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useGetProductsQuery } from "../../redux/services/productSlice";
-import { motion } from "framer-motion"; // Import animation library
-import { MdTune } from 'react-icons/md'
-import ProductFilters1 from "./ProductFilters1";
+import { useGetCategoriesQuery, useGetBrandsQuery } from "../../redux/services/filterSlice"; // Import new hooks
+import ProductCard from "./ProductCard";
+import SkeletonCard from "./SkeletonCard";
+import { FiFilter } from "react-icons/fi";
+import ProductFilters from "./ProductFilters";
 
-const ProductList = () => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [priceRange, setPriceRange] = useState(200);
+const QuickFilterButton = ({ label, param, value, currentParams, onClick }) => {
+  const isActive = currentParams.get(param) === value;
+  return (
+    <button
+      onClick={() => onClick(param, value)}
+      className={`px-4 py-2 text-sm border rounded-full ${isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-gray-50'}`}
+    >
+      {label}
+    </button>
+  );
+};
+
+const ProductPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const loaderRef = useRef(null);
 
-  // Fetch products from API
-  const { data: products, refetch, error, isLoading } = useGetProductsQuery();
-  
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-  const toggleFilterDropdown = () => setIsFilterOpen(!isFilterOpen);
-  const handlePriceChange = (event) => setPriceRange(event.target.value);
+  const getFiltersFromURL = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    const brands = params.get('brands');
+    return {
+      sortBy: params.get('sortBy') || '',
+      gender: params.get('gender') || '', // Added gender
+      category: params.get('category') || '',
+      brands: brands ? brands.split(',') : [],
+      minPrice: params.get('minPrice') || '',
+      maxPrice: params.get('maxPrice') || '',
+      rating: params.get('rating') || '', // Added rating
+    };
+  }, [location.search]);
+
+  const [page, setPage] = useState(1);
+  const [currentFilters, setCurrentFilters] = useState(getFiltersFromURL());
+  const [combinedProducts, setCombinedProducts] = useState([]);
+
+  const { data: categoriesData } = useGetCategoriesQuery();
+  const { data: brandsData } = useGetBrandsQuery();
+  const categories = categoriesData?.data || [];
+  const brands = brandsData?.data || [];
+
+  useEffect(() => {
+    const newFilters = getFiltersFromURL();
+    if (JSON.stringify(newFilters) !== JSON.stringify(currentFilters)) {
+      setPage(1);
+      setCurrentFilters(newFilters);
+      setCombinedProducts([]);
+    }
+  }, [location.search, currentFilters, getFiltersFromURL]);
+
+  const queryParams = new URLSearchParams(location.search);
+  queryParams.set('page', page);
+  const query = queryParams.toString();
+
+  const { data, isLoading, isFetching, isError, error } = useGetProductsQuery(query);
+
+  useEffect(() => {
+    if (data?.data) {
+      setCombinedProducts(prev => {
+        if (page === 1) return data.data;
+        const existingIds = new Set(prev.map(p => p._id));
+        const newProducts = data.data.filter(p => !existingIds.has(p._id));
+        return [...prev, ...newProducts];
+      });
+    }
+  }, [data, page]);
+
+  const pagination = data?.pagination;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      const target = entries[0];
+      if (target.isIntersecting && !isFetching && pagination && pagination.page < pagination.totalPages) {
+        setPage((prevPage) => prevPage + 1);
+      }
+    });
+    const currentLoader = loaderRef.current;
+    if (currentLoader) observer.observe(currentLoader);
+    return () => { if (currentLoader) observer.unobserve(currentLoader); };
+  }, [isFetching, pagination]);
+
+  const handleApplyFilters = (filters) => {
+    const params = new URLSearchParams(location.search);
+    // Use a helper to set or delete params
+    const updateParam = (key, value) => {
+      if (value && value.length > 0) {
+        if (Array.isArray(value)) params.set(key, value.join(','));
+        else params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    };
+    
+    updateParam('gender', filters.gender);
+    updateParam('category', filters.category);
+    updateParam('brands', filters.brands);
+    updateParam('minPrice', filters.minPrice);
+    updateParam('maxPrice', filters.maxPrice);
+    updateParam('rating', filters.rating);
+    
+    navigate(`/products?${params.toString()}`);
+  };
+
+  const handleQuickFilterClick = (param, value) => {
+    const params = new URLSearchParams(location.search);
+    if (params.get(param) === value) {
+        params.delete(param);
+    } else {
+        params.set(param, value);
+    }
+    navigate(`/products?${params.toString()}`);
+  };
 
   return (
-    <div className="flex flex-col min-h-screen">
-    
-  <div className="relative w-full max-w-5xl">
-      <form className="flex items-center gap-4 border-b-2 border-white py-1 w-full max-w-xs">
-      <button 
-      type="button" 
-      onClick={toggleFilterDropdown}
-      className="ml-2 flex items-center w-[140px] h-[50px] pt-[3px] pr-[9px] pb-[3px] pl-[9px] gap-[10px] rounded-[15px] bg-[#F4F6F5]">
-          Filter
-      <MdTune className="w-5 h-5 text-gray-700 opacity-100" />
+    <div className="p-4 md:p-8">
+      <div className="flex items-center gap-4 mb-6 relative">
+        <button onClick={() => setIsFilterOpen(true)} className="flex items-center gap-2 px-4 py-2 border rounded-md">
+          <FiFilter /> Filters
         </button>
-  {/* Other Filter Buttons */}
-  <button className="flex-shrink-0 w-[120px] h-[50px] rounded-[15px] bg-[#F4F6F5] text-gray-800 font-medium">
-    Popular
-  </button>
-  <button className="flex-shrink-0 w-[120px] h-[50px] rounded-[15px] bg-[#F4F6F5] text-gray-800 font-medium">
-    Top Deal
-  </button>
-  <button className="flex-shrink-0 w-[120px] h-[50px] rounded-[15px] bg-[#F4F6F5] text-gray-800 font-medium">
-    $100–1000
-  </button>
-  <button className="flex-shrink-0 w-[120px] h-[50px] rounded-[15px] bg-[#F4F6F5] text-gray-800 font-medium">
-    4+ Ratings
-  </button>
-  <button className="flex-shrink-0 w-[140px] h-[50px] rounded-[15px] bg-[#F4F6F5] text-gray-800 font-medium">
-    2 Days Delivery
-  </button> 
-</form>
-    </div>
+        <ProductFilters
+          isOpen={isFilterOpen}
+          onClose={() => setIsFilterOpen(false)}
+          initialFilters={currentFilters}
+          categories={categories}
+          brands={brands}
+          onApplyFilters={handleApplyFilters}
+        />
+        <div className="h-full border-l mx-2"></div>
+        {/* POPULAR QUICK FILTER */}
+        <QuickFilterButton label="Popular" param="sortBy" value="popularity" currentParams={new URLSearchParams(location.search)} onClick={handleQuickFilterClick} />
+      </div>
 
-    {/*  <h1 className="text-center mt-5 font-bold text-2xl md:text-3xl tracking-[5px]">
-        Products
-      </h1> */}
+      <main className="w-full">
+         { (isLoading && combinedProducts.length === 0) ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {Array(10).fill(0).map((_, index) => <SkeletonCard key={index} />)}
+              </div>
+          ) : isError ? (
+              <p className="text-center text-red-500 text-lg">Error: {error.toString()}</p>
+          ) : combinedProducts.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {combinedProducts.map((product) => (
+                  <ProductCard key={product._id} product={product} />
+                ))}
+              </div>
+          ) : !isFetching ? (
+              <p className="text-center text-gray-500 text-lg">No products found matching your criteria.</p>
+          ) : null}
 
-    {/*  <div className="flex justify-between items-center mt-4">
-        <h2 className="font-semibold text-[#24107D] text-xl ml-5 md:text-2xl"></h2> */}
-        
-        {/* Desktop Sort By Dropdown */}
-     {/*   <div className="flex items-center text-[#1D55C1] font-semibold rounded-full border-2 border-[#73C1DE] px-3 cursor-pointer mr-5">
-          <p className="mr-2">Sort by:</p>
-          <select className="bg-transparent p-2 focus:outline-none">
-         <option value="All">All</option>
-          </select>
-        </div> */}
-
-        {/* Mobile Filter Button */}
-{/*        <button
-          className="md:hidden p-4 bg-gray-800 text-white flex items-center"
-          onClick={toggleFilterDropdown}
-        >
-          {isFilterOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
-        </button>
-      </div> */}
-
-      {/* Mobile Filter Dropdown */}
-   {/*   {isFilterOpen && (
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          transition={{ duration: 0.3 }} 
-          className="md:hidden p-4 bg-gray-200 shadow-lg mt-4"
-        >
-          <ProductFiltersMobile priceRange={priceRange} handlePriceChange={handlePriceChange} />
-        </motion.div>
-      )}
-*/}
-{/*    <div className="flex flex-col md:flex-row mt-4">
-        
-        <ProductFiltersPC
-          isSidebarOpen={isSidebarOpen}
-          toggleSidebar={toggleSidebar}
-          priceRange={priceRange}
-          handlePriceChange={handlePriceChange}
-        /> */}
-<ProductFilters1 isFilterOpen={isFilterOpen} closeFilter={() => setIsFilterOpen(false)} />
-
-        {/* Main Section for Products */}
-        <main className="w-full  p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
-          {isLoading ? (
-            <p className="text-center col-span-full text-xl text-gray-500">Loading products...</p>
-          ) : error ? (
-            <p className="text-center col-span-full text-xl text-red-500">Error fetching products</p>
-          ) : (
-            products?.map((product) => (
-              
-              <motion.div 
-                key={product._id} 
-                initial={{ opacity: 0, scale: 0.9 }} 
-                animate={{ opacity: 1, scale: 1 }} 
-                transition={{ duration: 0.3 }}
-              > 
-                <ProductCard product={product} />
-              </motion.div>
-
-            ))
-          )}
-        </main>
-
-     {/* </div>  */}
-
-       {/*<Footer /> */}  {/*Footer */}
+          <div ref={loaderRef} className="h-20 text-center pt-4">
+            {isFetching && <p>Loading more products...</p>}
+            {!isFetching && pagination && pagination.page >= pagination.totalPages && combinedProducts.length > 0 && (
+              <p>You've reached the end!</p>
+            )}
+          </div>
+      </main>
     </div>
   );
 };
 
-export default ProductList;
+export default ProductPage;
