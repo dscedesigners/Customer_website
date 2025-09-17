@@ -1,59 +1,83 @@
 import { apiSlice } from "./apiSlice";
 
-const userAPI = '/api/users'
+// Note: Your base URL from apiSlice.js already includes '/api'
+const usersURL = '/users';
+const otpURL = '/otp';
+
 
 export const userApiSlice = apiSlice.injectEndpoints({
-    endpoints:(builder)=>({
-        createUser :builder.mutation({
-            query:({phone})=>({
-                url:`${userAPI}/signup`,
-                method:"POST",
-                body:{phone}
-            })
-        }),
-        updateUser: builder.mutation({
-            query: ({ userId, data }) => ({
-              url: `${userAPI}/update/${userId}`,
-              method: "PATCH",
-              body: data,
+    endpoints: (builder) => ({
+        // Sends the initial OTPs to email and phone
+        sendOtp: builder.mutation({
+            query: (data) => ({ // Expects { contact, purpose }
+                url: `${otpURL}`,
+                method: 'POST',
+                body: data,
             }),
         }),
-        addToCartOfUser : builder.mutation({
-            query: ({user, cartItems}) => ({
-                url:`${userAPI}/addtocart`,
-                method:"POST",
-                body:{user,cartItems}
-            })
+
+        // Resends an OTP to a specific contact
+        resendOtp: builder.mutation({
+            query: (data) => ({ // Expects { contact, purpose }
+                url: `${otpURL}/resend`,
+                method: 'POST',
+                body: data,
+            }),
         }),
-        removeFromCartUser : builder.mutation({
-            query: ({user, product}) => ({
-                url:`${userAPI}/removefromcart`,
-                method:"DELETE",
-                body:{user, product}
-            })
+
+        // Verifies an OTP before final signup
+        verifyOtp: builder.mutation({
+            query: (data) => ({ // Expects { contact, otp, purpose }
+                url: `${otpURL}/verify`,
+                method: 'POST',
+                body: data,
+            }),
         }),
-        removeProdFromCart : builder.mutation({
-            query: ({user, product}) => ({
-                url:`${userAPI}/removeproductfromcart`,
-                method:"DELETE",
-                body:{user, product}
-            })
+
+        // Final user registration
+        signup: builder.mutation({
+            query: (userData) => ({ // Expects { name, email, phone, password, emailOtp, phoneOtp }
+                url: `${usersURL}/signup`,
+                method: "POST",
+                body: userData,
+            }),
         }),
-        getUserById: builder.query({
-            query: ({userId}) => `${userAPI}/user/${userId}`,
+
+        // User login
+        login: builder.mutation({
+            query: (credentials) => ({ // Expects { contact, password }
+                url: `${usersURL}/login`,
+                method: "POST",
+                body: credentials,
+            }),
         }),
-        getCartItems: builder.query({
-            query: ({userId}) => `${userAPI}/cartitems/${userId}`,
-        })
-    })
-})
+
+        // Initiates the forgot password process
+        forgotPassword: builder.mutation({
+            query: (data) => ({ // Expects { contact }
+                url: `${usersURL}/forgot-password`,
+                method: 'POST',
+                body: data,
+            }),
+        }),
+
+        // Resets the password using an OTP
+        resetPassword: builder.mutation({
+            query: (data) => ({ // Expects { contact, otp, newPassword }
+                url: `${usersURL}/reset-password`,
+                method: 'POST',
+                body: data,
+            }),
+        }),
+    }),
+});
 
 export const {
-    useCreateUserMutation,
-    useUpdateUserMutation,
-    useAddToCartOfUserMutation,
-    useRemoveFromCartUserMutation,
-    useGetUserByIdQuery,
-    useGetCartItemsQuery,
-    useRemoveProdFromCartMutation
-} = userApiSlice
+    useSendOtpMutation,
+    useResendOtpMutation,
+    useVerifyOtpMutation,
+    useSignupMutation,
+    useLoginMutation,
+    useForgotPasswordMutation,
+    useResetPasswordMutation,
+} = userApiSlice;
