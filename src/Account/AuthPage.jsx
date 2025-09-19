@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   useLoginMutation,
   useSignupMutation,
@@ -8,23 +8,44 @@ import {
   useForgotPasswordMutation,
   useResetPasswordMutation,
   useResendOtpMutation,
+  useVerifyTokenMutation,
 } from '../redux/services/userSlice';
-import { setCredentials } from '../redux/feauters/authSlice';
+import { logOut } from '../redux/feauters/authSlice';
 import AuthImage from '../Utiles/AuthImage.jpg';
 import { FaChevronLeft } from "react-icons/fa";
 import OtpVerification from './OtpVerification';
 
 const AuthPage = () => {
-  const [authMode, setAuthMode] = useState('signUp');
+  const [authMode, setAuthMode] = useState('signIn'); // UPDATED: 'signIn' is now the default
   const [signupStep, setSignupStep] = useState(1);
   const [forgotPasswordStep, setForgotPasswordStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '', password: '', confirmPassword: '', phoneOtp: '', emailOtp: '', contact: '', newPassword: ''
   });
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [isCheckingToken, setIsCheckingToken] = useState(true);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { token } = useSelector((state) => state.auth);
+  const [verifyToken] = useVerifyTokenMutation();
+
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      if (token) {
+        try {
+          await verifyToken().unwrap();
+          navigate('/products');
+        } catch (error) {
+          dispatch(logOut());
+          setIsCheckingToken(false);
+        }
+      } else {
+        setIsCheckingToken(false);
+      }
+    };
+    checkAuthStatus();
+  }, [token, navigate, verifyToken, dispatch]);
 
   const [login, { isLoading: isLoggingIn }] = useLoginMutation();
   const [signup, { isLoading: isSigningUp }] = useSignupMutation();
@@ -78,7 +99,7 @@ const AuthPage = () => {
     clearMessages();
     const finalFormData = { ...formData, emailOtp: verifiedOtp };
     try {
-      const response = await signup({
+      await signup({
         name: finalFormData.name,
         email: finalFormData.email,
         phone: finalFormData.phone,
@@ -86,7 +107,6 @@ const AuthPage = () => {
         emailOtp: finalFormData.emailOtp,
         phoneOtp: finalFormData.phoneOtp,
       }).unwrap();
-      dispatch(setCredentials(response));
       navigate('/profilepage');
     } catch (err) {
       setMessage({ type: 'error', text: err.data?.message || 'Signup failed. Please try again.' });
@@ -100,8 +120,7 @@ const AuthPage = () => {
     clearMessages();
     try {
         const { contact, password } = formData;
-        const response = await login({ contact, password }).unwrap();
-        dispatch(setCredentials(response));
+        await login({ contact, password }).unwrap();
         navigate('/profilepage');
     } catch (err) {
         setMessage({ type: 'error', text: err.data?.message || 'Login failed.' });
@@ -222,6 +241,14 @@ const AuthPage = () => {
       default: return null;
     }
   };
+
+  if (isCheckingToken) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p className="text-xl font-semibold">Verifying session...</p>
+      </div>
+    );
+  }
 
   return (
     <>

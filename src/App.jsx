@@ -17,14 +17,18 @@ import Cart from './Pages/Cart/Cart';
 import ContactUs from './Pages/ContactUs';
 import ProfilePage from './Pages/Profile/ProfilePage'; // Import the Profile page
 import Nav from './Components/Nav';
+import ProtectedRoute from './Components/ProtectedRoute';
 
 function App() {
   return (
     <>
-      <Nav/>
+      
       <Routes>
-        <Route path="/" element={<Home />} />
         <Route path="/account" element={<AuthPage />} /> 
+
+
+        <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<Home />} />
         <Route path="/authlogintailor" element={<AuthLoginTailor />} />
         <Route path="/tailor-registration" element={<Registration />} />
         <Route path="/tailor-dashboard" element={<Dashboard />} />
@@ -39,6 +43,7 @@ function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/contact" element={<ContactUs />} />
         <Route path="/profilepage" element={<ProfilePage />} /> {/* Profile page route */}
+         </Route>
         {/* Profile page route */}
         
       </Routes>
