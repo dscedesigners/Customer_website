@@ -1,70 +1,161 @@
-import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
+// ProfilePage.jsx
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { logOut } from '../../redux/feauters/authSlice'; // 1. Import the logOut action
-import Sidebar from './Sidebar';
-import ProfileInfo from './ProfileInfo';
-import Orders from './Orders';
-import Address from './Address';
+import { MdEdit, MdArrowBack } from 'react-icons/md';
+import { FaUserCircle } from 'react-icons/fa';
+
+// 1. Import the RTK Query hooks
+import { useGetProfileQuery, useUpdateProfileMutation } from "../../redux/services/profileSlice"; // Adjust path if needed
 
 const ProfilePage = () => {
-  const [activeSection, setActiveSection] = useState('profileInfo');
+  // 2. State for form fields
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
+  // Gender state is removed
+  
+  const [isEditing, setIsEditing] = useState(false);
   const navigate = useNavigate();
-  const dispatch = useDispatch(); // 2. Initialize dispatch
 
-  // 3. Implement the full logout logic
-  const handleLogout = () => {
-    dispatch(logOut()); // Clears user from Redux state and local storage
-    navigate('/login'); // Redirect to login page
-  };
+  // 3. Use the hooks to fetch and update data
+  const { data: profileData, isLoading, refetch } = useGetProfileQuery();
+  const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
 
-  // Helper to get the title for the header
-  const getSectionTitle = () => {
-    switch (activeSection) {
-      case 'profileInfo':
-        return 'My Profile';
-      case 'orders':
-        return 'My Orders';
-      case 'address':
-        return 'Manage Addresses';
-      default:
-        return 'My Profile';
+  // 4. Populate form state when API data loads
+  useEffect(() => {
+    if (profileData?.user) {
+      setName(profileData.user.name || '');
+      setEmail(profileData.user.email || '');
+      setMobile(profileData.user.phone || ''); // Map 'phone' from API to 'mobile' state
+    }
+  }, [profileData]);
+
+  // 5. Update handleSave to call the API mutation
+  const handleSave = async () => {
+    const updatedData = {
+      name,
+      email,
+      phone: mobile, // Map 'mobile' state back to 'phone' for the API
+    };
+
+    try {
+      await updateProfile(updatedData).unwrap();
+      setIsEditing(false);
+      // refetch(); // Optional: refetch to confirm data (authSlice should also update)
+    } catch (error) {
+      console.error("Failed to update profile:", error);
     }
   };
 
-  const renderSection = () => {
-    switch (activeSection) {
-      case 'profileInfo':
-        return <ProfileInfo />;
-      case 'orders':
-        return <Orders />;
-      case 'address':
-        return <Address />;
-      default:
-        return <ProfileInfo />;
+  // 6. Update handleCancel to revert changes
+  const handleCancel = () => {
+    // Revert to original data from the query
+    if (profileData?.user) {
+      setName(profileData.user.name || '');
+      setEmail(profileData.user.email || '');
+      setMobile(profileData.user.phone || '');
     }
+    setIsEditing(false);
   };
+
+  // 7. Add a loading state
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div>Loading profile...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-gray-100 min-h-screen flex">
-      {/* The Sidebar component remains unchanged */}
-      <Sidebar setActiveSection={setActiveSection} handleLogout={handleLogout} />
-      
-      {/* 4. Main content area with a new header and cleaner layout */}
-      <main className="flex-1 p-4 sm:p-6 md:p-8">
-        <div className="max-w-7xl mx-auto">
-          <header className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-800">
-              {getSectionTitle()}
-            </h1>
-          </header>
-          
-          {/* Renders the active component (ProfileInfo, Orders, Address) */}
-          <div>
-            {renderSection()}
-          </div>
+    <div className="bg-white rounded-lg shadow-md p-6 max-w-xl mx-auto mt-8">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center text-xl font-semibold text-gray-800 hover:text-blue-600 transition"
+        >
+          <MdArrowBack className="mr-1" size={20} />
+          Shopping Continue
+        </button>
+
+        {!isEditing && (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-black hover:text-blue-800 flex items-center"
+          >
+            <MdEdit className="mr-2" size={20} />
+            Edit
+          </button>
+        )}
+      </div>
+
+      {/* User Icon and Info - Now shows data from API */}
+      <div className="flex items-center gap-4 mb-6">
+        <FaUserCircle size={40} className="text-gray-500" />
+        <div>
+          <p className="text-lg font-semibold text-gray-800">{name || 'Your name'}</p>
+          <p className="text-sm text-gray-500">{email || 'yourname@gmail.com'}</p>
         </div>
-      </main>
+      </div>
+
+      {/* Form Fields */}
+      <div className="space-y-4 text-gray-700">
+        <div>
+          <label className="font-medium block mb-1">Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            readOnly={!isEditing}
+            className={`w-full border rounded px-3 py-2 ${!isEditing ? 'bg-gray-100 cursor-not-allowed border-gray-200' : 'border-gray-300'}`}
+          />
+        </div>
+
+        <div>
+          <label className="font-medium block mb-1">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            readOnly={!isEditing}
+            className={`w-full border rounded px-3 py-2 ${!isEditing ? 'bg-gray-100 cursor-not-allowed border-gray-200' : 'border-gray-300'}`}
+          />
+        </div>
+
+        <div>
+          <label className="font-medium block mb-1">Mobile number</label>
+          <input
+            type="tel"
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
+            readOnly={!isEditing}
+            className={`w-full border rounded px-3 py-2 ${!isEditing ? 'bg-gray-100 cursor-not-allowed border-gray-200' : 'border-gray-300'}`}
+          />
+        </div>
+        
+        {/* 8. Gender field is now removed */}
+
+      </div>
+
+      {/* Action Buttons */}
+      {isEditing && (
+        <div className="flex justify-center gap-10 pt-6">
+          <button
+            onClick={handleCancel}
+            className="border border-gray-400 text-gray-700 px-4 py-2 rounded hover:bg-gray-100 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isUpdating} // Disable button while saving
+            className="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 transition disabled:opacity-50"
+          >
+            {isUpdating ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

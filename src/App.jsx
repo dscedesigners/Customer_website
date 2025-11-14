@@ -1,3 +1,4 @@
+// App.jsx
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Home from "./Pages/Home/Home";
@@ -18,6 +19,7 @@ import ContactUs from './Pages/ContactUs';
 import ProfilePage from './Pages/Profile/ProfilePage'; // Import the Profile page
 import Nav from './Components/Nav';
 import ProtectedRoute from './Components/ProtectedRoute';
+import SavedAddress from './Pages/Profile/SaveAddress';
 
 function App() {
   return (
@@ -28,23 +30,27 @@ function App() {
 
 
         <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/authlogintailor" element={<AuthLoginTailor />} />
-        <Route path="/tailor-registration" element={<Registration />} />
-        <Route path="/tailor-dashboard" element={<Dashboard />} />
-        <Route path="/pending-orders" element={<PendingOrders />} />
-        <Route path="/completed-orders" element={<CompletedOrders />} />
-        <Route path="/cancelled-orders" element={<CancelledOrders />} />
-        <Route path="/services-customization" element={<ServicesCustomization />} />
-        <Route path="/faqs" element={<FAQs />} />
-        <Route path="/edit-profile" element={<EditProfile />} />
-        <Route path="/products" element={<ProductList />} />
-        <Route path="/products/:productId" element={<ProductDetail />} />
-        <Route path="/cart" element={<Cart />} />
-        <Route path="/contact" element={<ContactUs />} />
-        <Route path="/profilepage" element={<ProfilePage />} /> {/* Profile page route */}
+          <Route path="/" element={<Home />} />
+          <Route path="/authlogintailor" element={<AuthLoginTailor />} />
+          <Route path="/tailor-registration" element={<Registration />} />
+          <Route path="/tailor-dashboard" element={<Dashboard />} />
+          <Route path="/pending-orders" element={<PendingOrders />} />
+          <Route path="/completed-orders" element={<CompletedOrders />} />
+          <Route path="/cancelled-orders" element={<CancelledOrders />} />
+          <Route path="/services-customization" element={<ServicesCustomization />} />
+          <Route path="/faqs" element={<FAQs />} />
+          <Route path="/edit-profile" element={<EditProfile />} />
+          <Route path="/products" element={<ProductList />} />
+          <Route path="/products/:productId" element={<ProductDetail />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/contact" element={<ContactUs />} />
+
+          {/* Profile Routes */}
+          <Route path="/profilepage" element={<ProfilePage />} />
+          {/* UPDATED PATH HERE: */}
+          <Route path="/profilepage/address" element={<SavedAddress />} />
+
          </Route>
-        {/* Profile page route */}
         
       </Routes>
     </>

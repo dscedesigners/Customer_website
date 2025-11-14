@@ -1,12 +1,13 @@
 // src/redux/features/authSlice.js
 
 import { createSlice } from '@reduxjs/toolkit';
-import { userApiSlice } from '../services/userSlice'; // Import the API slice
+import { userApiSlice } from '../services/userSlice'; // Import the auth API slice
+import { profileApiSlice } from '../services/profileSlice'; // Import the new profile slice
 
 const initialState = {
   user: JSON.parse(localStorage.getItem('user')) || null,
   token: localStorage.getItem('token') || null,
-  status: 'idle', // NEW: 'idle' | 'loading' | 'succeeded' | 'failed'
+  status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
 };
 
 const authSlice = createSlice({
@@ -20,9 +21,7 @@ const authSlice = createSlice({
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     },
-    // We no longer need setCredentials here, as extraReducers will handle it
   },
-  // NEW: extraReducers listen to actions from other slices (like userApiSlice)
   extraReducers: (builder) => {
     builder
       // When a login or token verification is pending, set status to 'loading'
@@ -32,6 +31,7 @@ const authSlice = createSlice({
       .addMatcher(userApiSlice.endpoints.verifyToken.matchPending, (state, action) => {
         state.status = 'loading';
       })
+      
       // When login or verification is successful, update credentials and status
       .addMatcher(userApiSlice.endpoints.login.matchFulfilled, (state, action) => {
         const { user, token } = action.payload;
@@ -46,6 +46,16 @@ const authSlice = createSlice({
         state.user = user;
         state.status = 'succeeded';
       })
+
+      // *** ADDED MATCHER ***
+      // When profile update is successful, update user state and localStorage
+      .addMatcher(profileApiSlice.endpoints.updateProfile.matchFulfilled, (state, action) => {
+        const { user } = action.payload; // Get the updated user from the response
+        state.user = user; // Update the user in auth state
+        state.status = 'succeeded';
+        localStorage.setItem('user', JSON.stringify(user)); // Update localStorage
+      })
+
       // When login or verification fails, clear the state
       .addMatcher(userApiSlice.endpoints.login.matchRejected, (state, action) => {
         state.status = 'failed';

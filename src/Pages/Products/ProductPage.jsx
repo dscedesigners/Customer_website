@@ -1,6 +1,8 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useGetProductsQuery } from "../../redux/productSlice"; // Import the Redux hook
+// 1. Import both product and cart hooks
+import { useGetProductsQuery } from "../../redux/productSlice"; 
+import { useAddOrUpdateItemMutation } from "../../redux/cartSlice"; // <-- Import cart mutation
 import ProductCard from "./ProductCard";
 import SkeletonCard from "./SkeletonCard";
 
@@ -8,10 +10,12 @@ const ProductPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Use the Redux hook to fetch data. It automatically handles loading, error, and data states.
+  // Use the Redux hook to fetch data
   const { data, isLoading, isError, error } = useGetProductsQuery(location.search);
+  
+  // 2. Initialize the mutation
+  const [addOrUpdateItem] = useAddOrUpdateItemMutation();
 
-  // Extract products and pagination from the hook's return value
   const products = data?.data || [];
   const pagination = data?.pagination;
 
@@ -22,7 +26,19 @@ const ProductPage = () => {
     navigate(`${location.pathname}?${params.toString()}`);
   };
 
+  // 3. Add the handler
+  const handleAddToCart = async (productId) => {
+    try {
+      await addOrUpdateItem({ productId, quantity: 1 }).unwrap();
+      console.log('Product added to cart');
+      // You can add a toast notification here
+    } catch (err) {
+      console.error('Failed to add product:', err);
+    }
+  };
+
   const renderPagination = () => {
+    // ... (no changes in this function)
     if (!pagination || !pagination.totalPages || pagination.totalPages <= 1) return null;
     return (
       <div className="flex justify-center items-center space-x-4 mt-8">
@@ -62,7 +78,12 @@ const ProductPage = () => {
       <>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {products.map((product) => (
-            <ProductCard key={product._id} product={product} />
+            // 4. Pass the handler to the card
+            <ProductCard 
+              key={product._id} 
+              product={product} 
+              onAddToCartClick={handleAddToCart}
+            />
           ))}
         </div>
         {renderPagination()}

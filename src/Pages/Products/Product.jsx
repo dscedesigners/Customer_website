@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGetProductsQuery } from "../../redux/services/productSlice";
 import { useGetCategoriesQuery, useGetBrandsQuery } from "../../redux/services/filterSlice";
+// 1. Import the cart mutation
+import { useAddOrUpdateItemMutation } from "../../redux/services/cartSlice"; 
 import ProductCard from "./ProductCard";
 import SkeletonCard from "./SkeletonCard";
 import { FiFilter } from "react-icons/fi";
@@ -22,7 +24,10 @@ const ProductPage = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const loaderRef = useRef(null);
 
-  const getFiltersFromURL = useCallback(() => { /* ... (no changes in this function) ... */
+  // 2. Initialize the mutation
+  const [addOrUpdateItem] = useAddOrUpdateItemMutation();
+
+  const getFiltersFromURL = useCallback(() => { /* ... (no changes) ... */
     const params = new URLSearchParams(location.search);
     const brands = params.get('brands');
     return { sortBy: params.get('sortBy') || '', gender: params.get('gender') || '', category: params.get('category') || '', brands: brands ? brands.split(',') : [], minPrice: params.get('minPrice') || '', maxPrice: params.get('maxPrice') || '', rating: params.get('rating') || '' };
@@ -81,29 +86,23 @@ const ProductPage = () => {
   };
   const currentParams = new URLSearchParams(location.search);
 
+  // 3. Add the handler
+  const handleAddToCart = async (productId) => {
+    try {
+      await addOrUpdateItem({ productId, quantity: 1 }).unwrap();
+      console.log('Product added to cart');
+      // You can add a toast notification here
+    } catch (err) {
+      console.error('Failed to add product:', err);
+    }
+  };
+
   return (
-    // FIX #1: Add `relative` to the main container. This makes it the positioning
-    // anchor for the absolute-positioned filter panel.
     <div className="relative p-4 md:p-8">
-      {/* <h1 className="text-3xl font-bold text-center mb-8">Explore Our Collection</h1>
-       */}
       <div className="flex items-center gap-4 mb-6 overflow-x-auto pb-2">
-        <button onClick={() => setIsFilterOpen(true)} className="flex items-center gap-2 px-4 py-2 border rounded-md whitespace-nowrap">
-          <FiFilter /> Filters
-        </button>
-        <div className="h-full border-l mx-2"></div>
-        <div className="flex items-center gap-2">
-          <QuickFilter onClick={() => handleQuickFilterClick('sortBy', 'popularity')} isActive={currentParams.get('sortBy') === 'popularity'}>Popular</QuickFilter>
-          <QuickFilter onClick={() => handleQuickFilterClick('priceRange', {min: 0, max: 500})} isActive={currentParams.get('minPrice') === '0' && currentParams.get('maxPrice') === '500'}>Under ₹500</QuickFilter>
-          <QuickFilter onClick={() => handleQuickFilterClick('priceRange', {min: 500, max: 1000})} isActive={currentParams.get('minPrice') === '500' && currentParams.get('maxPrice') === '1000'}>₹500-1000</QuickFilter>
-          <QuickFilter onClick={() => handleQuickFilterClick('rating', 4)} isActive={currentParams.get('rating') === '4'}>4+ Rating</QuickFilter>
-          <QuickFilter onClick={() => handleQuickFilterClick('gender', 'female')} isActive={currentParams.get('gender') === 'female'}>Female</QuickFilter>
-        </div>
+        {/* ... (filter bar buttons) ... */}
       </div>
 
-      {/* FIX #2: Move the ProductFilters component out of the filter bar.
-          Now it's a direct child of the main `relative` container, so it can
-          properly float on top of the product grid. */}
       <ProductFilters
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
@@ -123,7 +122,12 @@ const ProductPage = () => {
         ) : combinedProducts.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
             {combinedProducts.map((product) => (
-              <ProductCard key={product._id} product={product} />
+              // 4. Pass the handler to the card
+              <ProductCard 
+                key={product._id} 
+                product={product} 
+                onAddToCartClick={handleAddToCart} 
+              />
             ))}
           </div>
         ) : !isFetching ? (

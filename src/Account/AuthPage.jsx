@@ -253,14 +253,14 @@ const AuthPage = () => {
   return (
     <>
       <style>{`.btn-primary { background-color: #B5B1FF; color: #3B3A3A; } .btn-primary:hover { background-color: #2518BD; color: white; }`}</style>
-      <Link to="/" className="flex mt-10 ml-10">
+      {/* <Link to="/" className="flex mt-10 ml-10">
         <FaChevronLeft size={25} /> <h1 className="font-semibold">Go Back</h1>
-      </Link>
+      </Link> */}
       <div className="flex flex-col md:flex-row items-center justify-center mt-10">
-        <div className="hidden md:flex md:w-1/2 flex-col items-center justify-center p-8">
+        <div className="hidden md:flex md:w-1/2 flex-col items-center justify-center p-8 mt-10">
           <img src={AuthImage} alt="Auth" className="w-[500px] mb-20" />
         </div>
-        <div className="flex flex-col justify-center w-full md:w-1/3 p-6 md:p-8 mx-auto">
+        <div className="flex flex-col justify-center w-full md:w-1/3 p-6 md:p-8 mx-auto mt-10">
           <h1 className="w-full text-3xl font-bold mb-4">{getTitle()}</h1>
           {message.text && (
             <div className={`p-3 rounded-md mb-4 text-center ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGetProductByIdQuery, useGetProductSuggestionsQuery } from '../../redux/services/productSlice';
+import { useAddOrUpdateItemMutation } from '../../redux/services/cartSlice'; 
 import ProductCard from './ProductCard';
 import { FaStar } from 'react-icons/fa';
 import { IoIosArrowBack, IoIosArrowForward } from "react-icons/io";
@@ -17,18 +18,44 @@ const ProductDetail = () => {
     params: { limit: 4 }
   });
 
+  const [addOrUpdateItem, { isLoading: isUpdatingCart }] = useAddOrUpdateItemMutation();
+
   const [selectedImage, setSelectedImage] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // --- BUG 1 FIX: Add new state to track cart status ---
+  const [isInCart, setIsInCart] = useState(false);
 
+  // Effect to set initial state when product data loads
   useEffect(() => {
-    if (product?.thumbnail) {
+    if (product) {
       setSelectedImage(product.thumbnail);
-      setQuantity(1);
+      setQuantity(product.cart > 0 ? product.cart : 1);
+      // --- BUG 1 FIX: Initialize the new state ---
+      setIsInCart(product.cart > 0);
       setIsExpanded(false);
     }
-  }, [product]);
+  }, [product]); 
 
+  // Debounce logic for quantity + / - buttons
+  const debounceTimer = useRef(null);
+  const debouncedUpdateCart = useCallback(async (pid, qty) => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        await addOrUpdateItem({ productId: pid, quantity: qty }).unwrap();
+        // --- BUG 1 FIX: Update cart status on successful debounce ---
+        setIsInCart(true); 
+      } catch (err) {
+        console.error("Failed to update cart:", err);
+      }
+    }, 3000); 
+  }, [addOrUpdateItem]);
+
+  // --- Image Gallery Handlers (Unchanged) ---
   const allImages = product ? [product.thumbnail, ...product.otherImages] : [];
 
   const handlePrevImage = () => {
@@ -43,17 +70,41 @@ const ProductDetail = () => {
     setSelectedImage(allImages[nextIndex]);
   };
   
+  // --- Cart Handlers ---
   const handleQuantityChange = (amount) => {
-    setQuantity((prev) => Math.max(1, prev + amount));
+    setQuantity((prev) => {
+      const newQuantity = Math.max(1, prev + amount);
+      
+      // If the item is already in the cart (or was just added), start debounce
+      if (isInCart) {
+        debouncedUpdateCart(product._id, newQuantity);
+      }
+      
+      return newQuantity;
+    });
   };
   
-  const handleAddToCart = () => {
-    alert(`${product.name} (x${quantity}) has been added to your cart!`);
+  const handleAddToCart = async () => {
+    if (!product) return;
+    try {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      await addOrUpdateItem({ productId: product._id, quantity }).unwrap();
+      // --- BUG 1 FIX: Update cart status on successful click ---
+      setIsInCart(true); 
+      console.log('Item added/updated in cart');
+    } catch (err) {
+      console.error('Failed to add to cart:', err);
+    }
   };
 
-  const handleSuggestionCartClick = (productId, qty) => {
-    alert(`Product ID: ${productId}, Quantity: ${qty}`);
+  const handleSuggestionCartClick = async (pid) => {
+    // This assumes ProductCard is stateful and handles its own logic
+    console.log("Suggestion clicked", pid); 
   };
+
+  // --- Render Logic ---
 
   if (isLoading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
   if (isError) return <div className="flex justify-center items-center h-screen text-red-500">Error fetching product.</div>;
@@ -65,6 +116,14 @@ const ProductDetail = () => {
     ? `${product.description.substring(0, CHAR_LIMIT)}...` 
     : product.description;
 
+  // --- BUG 2 FIX: Create a dynamic button text variable ---
+  let buttonText;
+  if (isUpdatingCart) {
+    buttonText = isInCart ? "Updating..." : "Adding...";
+  } else {
+    buttonText = isInCart ? "Update Cart" : "Add To Cart";
+  }
+
   return (
     <div className="max-w-6xl mx-auto p-8 md:p-16 font-sans">
       <Link to="/products" className="text-sm text-gray-600 hover:underline mb-6 inline-block">
@@ -73,7 +132,7 @@ const ProductDetail = () => {
 
       <div className="grid md:grid-cols-2 gap-10 lg:gap-16">
         
-        {/* --- Image Gallery --- */}
+        {/* --- Image Gallery (Unchanged) --- */}
         <div className="flex flex-col gap-4">
           <div className="relative w-full h-[500px] bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
             <button onClick={handlePrevImage} className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/60 hover:bg-white rounded-full p-2 z-10 transition-colors duration-300">
@@ -101,7 +160,7 @@ const ProductDetail = () => {
           </div>
         </div>
 
-        {/* --- Product Info --- */}
+        {/* --- Product Info (Unchanged) --- */}
         <div className="flex flex-col pt-4">
           <h1 className="text-3xl lg:text-4xl font-bold text-gray-900">{product.name}</h1>
           <div className="flex items-center gap-4 my-4 text-sm text-gray-600">
@@ -127,23 +186,27 @@ const ProductDetail = () => {
             {product.color && <div className="flex items-center"><p className="text-gray-600 w-20">Color:</p><p className="font-bold">{product.color}</p></div>}
             {product.cloth && <div className="flex items-center"><p className="text-gray-600 w-20">Cloth:</p><p className="font-bold">{product.cloth}</p></div>}
           </div>
+          
           <div className="flex items-center gap-6 mt-6">
             <div className="flex items-center border border-gray-300 rounded-lg">
               <button onClick={() => handleQuantityChange(-1)} className="px-5 py-3 text-lg hover:bg-gray-100 rounded-l-lg transition">-</button>
               <span className="px-6 py-3 text-md font-bold select-none">{quantity}</span>
               <button onClick={() => handleQuantityChange(1)} className="px-5 py-3 text-lg hover:bg-gray-100 rounded-r-lg transition">+</button>
             </div>
+            
+            {/* --- BUG 2 FIX: Disable button and use dynamic text --- */}
             <button
               onClick={handleAddToCart}
-              className="flex-1 bg-[#222] text-white font-bold py-4 px-8 rounded-lg hover:bg-black transition-colors duration-300"
+              disabled={isUpdatingCart} 
+              className="flex-1 bg-[#222] text-white font-bold py-4 px-8 rounded-lg hover:bg-black transition-colors duration-300 disabled:opacity-50"
             >
-              Add To Cart
+              {buttonText}
             </button>
           </div>
         </div>
       </div>
 
-      {/* --- Related Products Section --- */}
+      {/* --- Related Products Section (Unchanged) --- */}
       <div className="mt-16 md:mt-24">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">Related Products</h2>
@@ -165,7 +228,6 @@ const ProductDetail = () => {
                 <ProductCard
                   key={suggestedProduct._id}
                   product={suggestedProduct}
-                  onAddToCartClick={handleSuggestionCartClick}
                 />
               ))}
             </div>

@@ -1,40 +1,73 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { FiShoppingCart } from "react-icons/fi";
 import { FaPlus, FaMinus } from "react-icons/fa";
+// 1. Import the cart mutation hooks
+import { 
+    useAddOrUpdateItemMutation, 
+    useDeleteItemMutation 
+} from "../../redux/services/cartSlice"; // Adjust path as needed
 
 const ProductCard = ({ product }) => {
-  // Use state to track the quantity. 0 means not in cart.
-  const [quantity, setQuantity] = useState(0);
+  // 2. Initialize quantity state from product.cart (which comes from the API)
+  const [quantity, setQuantity] = useState(product.cart || 0);
 
-  // This function handles the very first click on the cart icon
+  // 3. Initialize mutation hooks
+  const [addOrUpdateItem] = useAddOrUpdateItemMutation();
+  const [deleteItem] = useDeleteItemMutation();
+
+  // 4. Update state if the prop changes (after a refetch)
+  useEffect(() => {
+    setQuantity(product.cart || 0);
+  }, [product.cart]);
+
+  // 5. Create a ref to hold the debounce timer
+  const debounceTimer = useRef(null);
+
+  // 6. Handle the very first "Add to Cart" click
   const handleInitialAddToCart = (e) => {
-    // Prevent the parent Link from navigating to the product detail page
     e.stopPropagation();
     e.preventDefault();
     
     const newQuantity = 1;
-    setQuantity(newQuantity);
-    alert(`Added to cart!\nProduct ID: ${product._id}\nQuantity: ${newQuantity}`);
+    setQuantity(newQuantity); // Optimistic UI update
+    
+    // Call API (no debounce for the first add)
+    addOrUpdateItem({ productId: product._id, quantity: newQuantity })
+      .unwrap()
+      .catch(() => setQuantity(0)); // Revert on error
   };
 
-  // This function handles clicks on the '+' and '-' buttons
+  // 7. Handle quantity changes (+/-) with debounce
   const handleQuantityChange = (e, amount) => {
-    // Prevent the parent Link from navigating
     e.stopPropagation();
     e.preventDefault();
 
-    const newQuantity = quantity + amount;
+    const oldQuantity = quantity;
+    const newQuantity = oldQuantity + amount;
 
-    // The quantity cannot go below 0
     if (newQuantity < 0) return;
 
+    // Optimistic UI update
     setQuantity(newQuantity);
 
+    // Clear any existing timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
     if (newQuantity === 0) {
-      alert(`Item removed from cart.\nProduct ID: ${product._id}`);
+      // If quantity is 0, delete the item (no debounce)
+      deleteItem(product._id)
+        .unwrap()
+        .catch(() => setQuantity(oldQuantity)); // Revert on error
     } else {
-      alert(`Quantity updated!\nProduct ID: ${product._id}\nNew Quantity: ${newQuantity}`);
+      // Otherwise, update the item with a 3-second debounce
+      debounceTimer.current = setTimeout(() => {
+        addOrUpdateItem({ productId: product._id, quantity: newQuantity })
+          .unwrap()
+          .catch(() => setQuantity(oldQuantity)); // Revert on error
+      }, 3000); // 3-second debounce
     }
   };
 
@@ -58,7 +91,7 @@ const ProductCard = ({ product }) => {
         <div className="flex justify-between items-center w-full mt-4">
           <p className="font-semibold text-[#2518BD]">₹{product.price}</p>
           
-          {/* --- CONDITIONAL UI: Show Cart Icon OR Quantity Selector --- */}
+          {/* --- 8. CONDITIONAL UI based on new state --- */}
           {quantity === 0 ? (
             // If quantity is 0, show the "Add to Cart" icon
             <div

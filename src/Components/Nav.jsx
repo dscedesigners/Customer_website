@@ -16,6 +16,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { logOut } from "../redux/feauters/authSlice";
 import Sidebar from "./Sidebar";
 import logo from '../Utiles/logo2.png';
+import { useGetCartLengthQuery } from "../redux/services/cartSlice";
 
 const Nav = () => {
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -26,6 +27,11 @@ const Nav = () => {
   const { user } = useSelector(state => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const { data: cartLengthData } = useGetCartLengthQuery(undefined, {
+    skip: !user, 
+  });
+  const cartCount = cartLengthData?.length || 0;
 
   const handleLogout = () => {
     dispatch(logOut());
@@ -42,7 +48,7 @@ const Nav = () => {
   const handleMouseLeave = () => {
     const timeoutId = setTimeout(() => {
       setDropdownVisible(false);
-    }, 200); // 200ms delay to prevent fast closing
+    }, 200); 
     setHideTimeoutId(timeoutId);
   };
 
@@ -104,6 +110,11 @@ const Nav = () => {
 
           <Link to="/cart" className="relative">
             <FaShoppingCart className="text-2xl text-gray-800" />
+            {user && cartCount > 0 && (
+              <span className="absolute -top-2 -right-3 bg-red-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full">
+                {cartCount}
+              </span>
+            )}
           </Link>
 
           {user ? (
@@ -125,7 +136,7 @@ const Nav = () => {
                       <div className="flex items-center"><FaUser className="mr-3" /> Profile</div>
                       <span>&rsaquo;</span>
                     </Link>
-                    <Link to="/profilepage/orders" className="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
+                    <Link to="/orders" className="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
                       <div className="flex items-center"><FaBox className="mr-3" /> Orders</div>
                       <span>&rsaquo;</span>
                     </Link>
@@ -136,7 +147,8 @@ const Nav = () => {
                     <Link to="/settings" className="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
                       <div className="flex items-center"><FaCog className="mr-3" /> Settings</div>
                       <span>&rsaquo;</span>
-                    </Link>
+                    {/* --- THIS IS THE FIX --- */}
+                    </Link> 
                      <div className="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
                         <div className="flex items-center"><FaBell className="mr-3" /> Notification</div>
                         <button className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">Allow</button>
