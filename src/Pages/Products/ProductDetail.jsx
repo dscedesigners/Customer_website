@@ -52,7 +52,7 @@ const ProductDetail = () => {
       } catch (err) {
         console.error("Failed to update cart:", err);
       }
-    }, 3000); 
+    }, 1500); 
   }, [addOrUpdateItem]);
 
   // --- Image Gallery Handlers (Unchanged) ---

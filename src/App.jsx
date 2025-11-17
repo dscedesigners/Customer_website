@@ -20,6 +20,8 @@ import ProfilePage from './Pages/Profile/ProfilePage'; // Import the Profile pag
 import Nav from './Components/Nav';
 import ProtectedRoute from './Components/ProtectedRoute';
 import SavedAddress from './Pages/Profile/SaveAddress';
+import Orders from "./Pages/Orders/Orders"
+import OrderDetail from './Pages/Orders/OrderDetail';
 
 function App() {
   return (
@@ -44,12 +46,10 @@ function App() {
           <Route path="/products/:productId" element={<ProductDetail />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/contact" element={<ContactUs />} />
-
-          {/* Profile Routes */}
           <Route path="/profilepage" element={<ProfilePage />} />
-          {/* UPDATED PATH HERE: */}
           <Route path="/profilepage/address" element={<SavedAddress />} />
-
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/:orderId" element={<OrderDetail />} />
          </Route>
         
       </Routes>

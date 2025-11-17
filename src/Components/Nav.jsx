@@ -23,6 +23,9 @@ const Nav = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1000);
   const [isDropdownVisible, setDropdownVisible] = useState(false);
   const [hideTimeoutId, setHideTimeoutId] = useState(null);
+  
+  // --- 1. Add state for the search term ---
+  const [searchTerm, setSearchTerm] = useState("");
 
   const { user } = useSelector(state => state.auth);
   const dispatch = useDispatch();
@@ -50,6 +53,14 @@ const Nav = () => {
       setDropdownVisible(false);
     }, 200); 
     setHideTimeoutId(timeoutId);
+  };
+
+  // --- 2. Add search handler function ---
+  const handleSearch = (e) => {
+    // Check if the key pressed is "Enter" and the search term isn't empty
+    if (e.key === 'Enter' && searchTerm.trim() !== "") {
+      navigate(`/products?search=${searchTerm.trim()}`);
+    }
   };
 
   useEffect(() => {
@@ -99,10 +110,14 @@ const Nav = () => {
         <div className="flex items-center space-x-4 md:space-x-6">
           {!isMobile && (
             <div className="relative flex">
+              {/* --- 3. Connect input to state and handler --- */}
               <input
                 type="text"
                 placeholder="Search products..."
                 className="w-full md:w-96 pl-8 p-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearch}
               />
               <FaSearch className="absolute top-3 left-2 text-[#5D5FEF]" />
             </div>
@@ -147,7 +162,6 @@ const Nav = () => {
                     <Link to="/settings" className="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
                       <div className="flex items-center"><FaCog className="mr-3" /> Settings</div>
                       <span>&rsaquo;</span>
-                    {/* --- THIS IS THE FIX --- */}
                     </Link> 
                      <div className="flex items-center justify-between px-4 py-2 text-gray-700 hover:bg-gray-100">
                         <div className="flex items-center"><FaBell className="mr-3" /> Notification</div>

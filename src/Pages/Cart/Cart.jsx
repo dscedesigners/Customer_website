@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+// 1. Import Link from react-router-dom
+import { useNavigate, Link } from "react-router-dom";
 import { FaTrash, FaMapMarkerAlt, FaPhone, FaPlus } from "react-icons/fa";
 import { FiMoreVertical } from "react-icons/fi";
 import { AiOutlineClose } from "react-icons/ai";
-import emptyCartImg from "../../assets/emptycart.jpg"; // Make sure this path is correct
+import emptyCartImg from "../../assets/emptycart.jpg"; 
 
 // Import all necessary hooks
 import { 
@@ -19,6 +20,7 @@ import {
   useCreateAddressMutation,
   useUpdateAddressMutation
 } from "../../redux/services/addressSlice";
+import { useCreateOrderMutation } from "../../redux/services/orderSlice"; 
 import AddAddressForm from "../Profile/AddAddressForm";   
 import EditAddressModal from "../Profile/EditAddressModal"; 
 
@@ -35,7 +37,6 @@ export default function Cart() {
   // Fetch Cart Data
   const { data: cartData, isLoading: isCartLoading, refetch: refetchCart } = useGetCartQuery();
   
-  // Local state to manage UI updates instantly for the debounce
   const [localCart, setLocalCart] = useState([]);
   
   // Fetch Address Data
@@ -49,6 +50,7 @@ export default function Cart() {
   const [deleteAddress] = useDeleteAddressMutation();
   const [createAddress, { isLoading: isCreating }] = useCreateAddressMutation();
   const [updateAddress, { isLoading: isUpdating }] = useUpdateAddressMutation();
+  const [createOrder, { isLoading: isPlacingOrder }] = useCreateOrderMutation(); 
 
   // Address State
   const [selectedAddressId, setSelectedAddressId] = useState(null);
@@ -63,7 +65,6 @@ export default function Cart() {
 
   // coupon
   const [coupon, setCoupon] = useState("");
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   // --- Effects ---
   useEffect(() => {
@@ -94,7 +95,7 @@ export default function Cart() {
           refetchCart();
         });
       delete debounceTimers.current[productId];
-    }, 3000); 
+    }, 1500); 
   }, [addOrUpdateItem, refetchCart]);
 
   // --- Cart actions ---
@@ -193,65 +194,56 @@ export default function Cart() {
     }
   };
 
-  // --- Place Order Logic ---
-  const handlePlaceOrder = async () => {
-    setIsPlacingOrder(true);
-    // 1. Refetch cart from backend for final stock check
-    const { data: freshCartData } = await refetchCart();
-    const freshItems = freshCartData?.cartItems || [];
-
-    if (freshItems.length === 0) {
-      alert('Your cart is empty.');
-      setIsPlacingOrder(false);
-      return;
-    }
-
-    // 2. Check for stock issues
-    const stockIssues = freshItems.filter(i => i.stock === 0 || i.quantity > i.stock);
-
-    if (stockIssues.length > 0) {
-      const issueMessages = stockIssues.map(i => 
-        i.stock === 0 
-          ? `${i.name} is now out of stock.`
-          : `${i.name} only has ${i.stock} items available (you have ${i.quantity}).`
-      );
-      alert(`Please fix issues in your cart:\n\n${issueMessages.join('\n')}`);
-      setLocalCart(freshItems); // Sync local state with server
-    } else {
-      // 3. No issues, place order
-      if (!selectedAddressId) {
-        alert("Please select a shipping address before placing an order.");
-        setIsPlacingOrder(false);
-        return;
-      }
-      
-      // --- FIX: Include selectedAddressId in the alert ---
-      alert(`Order placed successfully for address: ${selectedAddressId}`);
-      // TODO: Call createOrder mutation here
-    }
-    setIsPlacingOrder(false);
-  };
-
-  // --- 1. FRONTEND CALCULATION ---
-  // We use useMemo to avoid recalculating on every render
+  // --- Frontend Calculation ---
   const { subtotal, calculatedTax, total } = useMemo(() => {
-    // Only use items with stock > 0 for calculation
     const validItems = localCart.filter(item => item.stock > 0);
-    
-    // Calculate subtotal from local state
     const subtotal = validItems.reduce((acc, item) => {
       return acc + (item.price * item.quantity);
     }, 0);
     
-    // Get tax rate from API (falls back to 0 if not loaded)
     const taxRate = cartData?.taxrate || 0;
     const calculatedTax = subtotal * (taxRate / 100);
-    
-    // Calculate total from local state
     const total = subtotal + calculatedTax;
     
     return { subtotal, calculatedTax, total };
-  }, [localCart, cartData?.taxrate]); // Recalculate when localCart or taxrate changes
+  }, [localCart, cartData?.taxrate]); 
+
+  // --- Place Order Logic ---
+  const handlePlaceOrder = async () => {
+    if (!selectedAddressId) {
+      alert("Please select a shipping address.");
+      return;
+    }
+
+    try {
+      const orderData = {
+        addressId: selectedAddressId,
+        totalAmount: total, 
+      };
+
+      const result = await createOrder(orderData).unwrap();
+
+      alert(result.message || "Order created successfully");
+      navigate('/orders'); 
+
+    } catch (err) {
+      // Handle specific API errors
+      if (err.data) {
+        if (err.data.message === "Total amount mismatch") {
+          alert(`Error: ${err.data.message}\nExpected: ${err.data.expected}\nReceived: ${err.data.received}\n\nPlease refresh the page and try again.`);
+          refetchCart(); 
+        } else if (err.data.message === "Some items are not available. Check the cart.") {
+          alert(`Error: ${err.data.message}\n\n${err.data.errors.join('\n')}`);
+          refetchCart(); 
+        } else {
+          alert(err.data.message || "An unknown error occurred.");
+        }
+      } else {
+        alert("An unknown error occurred.");
+      }
+    }
+  };
+
 
   // Loading state
   if (isCartLoading || isAddressesLoading) {
@@ -261,8 +253,25 @@ export default function Cart() {
   // Empty cart UI
   if (localCart.length === 0) {
     return (
-      <div className="min-h-screen bg-white flex flex-col">
-        {/* (empty cart JSX - no changes) */}
+      <div className="min-h-[80vh] bg-white flex flex-col items-center justify-center p-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-serif font-medium mb-3">Your cart is empty</h1>
+          <p className="text-gray-500 mb-8">Add some products to get started</p>
+          <button
+            onClick={() => navigate("/products")} 
+            className="bg-black text-white px-10 py-3 rounded-full shadow font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Continue shopping
+          </button>
+
+          <div className="mt-12">
+            <img
+              src={emptyCartImg} 
+              alt="Empty shopping cart"
+              className="mx-auto max-w-lg w-full h-auto"
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -278,11 +287,10 @@ export default function Cart() {
       </button>
 
       <h2 className="text-2xl font-semibold mb-2">Shopping Cart</h2>
-      {/* This count is from the API, which is fine */}
       <p className="text-gray-500 mb-6">You have {cartData?.itemCount || 0} items in your cart</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left column: items (no changes) */}
+        {/* Left column: items */}
         <div className="lg:col-span-7 space-y-4">
           {localCart.map((item) => {
             const isOutOfStock = item.stock === 0;
@@ -311,12 +319,16 @@ export default function Cart() {
                 )}
 
                 <div className="grid grid-cols-[88px_1fr_auto] gap-4 items-center">
-                  <div className="aspect-[3/4] w-22 overflow-hidden rounded-xl bg-gray-100">
+                  {/* --- 2. Wrap image in Link --- */}
+                  <Link to={`/products/${item.productId}`} className="aspect-[3/4] w-22 overflow-hidden rounded-xl bg-gray-100">
                     <img src={item.thumbnail} alt={item.name} className="h-full w-full object-cover" />
-                  </div>
+                  </Link>
 
                   <div className="space-y-1">
-                    <h3 className="text-lg font-semibold leading-tight">{item.name}</h3>
+                    {/* --- 3. Wrap name in Link --- */}
+                    <Link to={`/products/${item.productId}`}>
+                      <h3 className="text-lg font-semibold leading-tight hover:underline">{item.name}</h3>
+                    </Link>
                     <p className="text-sm text-gray-600">Size : {item.size}</p>
                     <p className="text-sm text-gray-600">Color : {item.color}</p>
                     <p className="pt-1 font-semibold">{inr(item.price)}</p>
@@ -358,7 +370,6 @@ export default function Cart() {
         {/* Right column */}
         <div className="lg:col-span-5 space-y-6">
           
-          {/* Shipping Details Card (no changes) */}
           <div className="rounded-2xl border p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Shipping Details</h3>
@@ -369,6 +380,7 @@ export default function Cart() {
                 Change
               </button>
             </div>
+
             <div className="mt-3 text-sm space-y-2">
               <div className="flex items-start gap-3">
                 <FaMapMarkerAlt className="mt-0.5 text-black" />
@@ -384,18 +396,10 @@ export default function Cart() {
             </div>
           </div>
 
-          {/* Shipping Method card (Commented out) */}
-          {/*
-          <div className="rounded-2xl border p-4">
-            ...
-          </div>
-          */}
-
           {/* Summary card */}
           <div className="rounded-2xl border p-4 space-y-4">
             <h3 className="text-lg font-semibold">Summary</h3>
 
-            {/* --- 2. USE FRONTEND CALCULATIONS --- */}
             <div className="flex justify-between text-sm">
               <span>Subtotal</span>
               <span>{inr(subtotal)}</span>

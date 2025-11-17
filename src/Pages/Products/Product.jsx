@@ -2,8 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGetProductsQuery } from "../../redux/services/productSlice";
 import { useGetCategoriesQuery, useGetBrandsQuery } from "../../redux/services/filterSlice";
-// 1. Import the cart mutation
-import { useAddOrUpdateItemMutation } from "../../redux/services/cartSlice"; 
+// 1. Import all 3 hooks
+import { 
+  useAddOrUpdateItemMutation, 
+  useDeleteItemMutation 
+} from "../../redux/services/cartSlice"; 
 import ProductCard from "./ProductCard";
 import SkeletonCard from "./SkeletonCard";
 import { FiFilter } from "react-icons/fi";
@@ -24,33 +27,64 @@ const ProductPage = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const loaderRef = useRef(null);
 
-  // 2. Initialize the mutation
+  // 2. Import cart mutations
   const [addOrUpdateItem] = useAddOrUpdateItemMutation();
+  const [deleteItem] = useDeleteItemMutation();
 
-  const getFiltersFromURL = useCallback(() => { /* ... (no changes) ... */
+  // 3. NEW STATE: Holds quantities for all products
+  // This state will persist even when child components unmount
+  const [cartQuantities, setCartQuantities] = useState({});
+  
+  // 4. NEW REF: Holds debounce timers for each product
+  const debounceTimers = useRef({});
+
+  const getFiltersFromURL = useCallback(() => {
     const params = new URLSearchParams(location.search);
     const brands = params.get('brands');
     return { sortBy: params.get('sortBy') || '', gender: params.get('gender') || '', category: params.get('category') || '', brands: brands ? brands.split(',') : [], minPrice: params.get('minPrice') || '', maxPrice: params.get('maxPrice') || '', rating: params.get('rating') || '' };
   }, [location.search]);
 
-  // --- All the state management and data fetching logic below remains the same ---
+  // --- State management ---
   const [page, setPage] = useState(1);
   const [currentFilters, setCurrentFilters] = useState(getFiltersFromURL());
   const [combinedProducts, setCombinedProducts] = useState([]);
+  
+  // --- Data Fetching ---
   const { data: categoriesData } = useGetCategoriesQuery();
   const { data: brandsData } = useGetBrandsQuery();
   const categories = categoriesData?.data || [];
   const brands = brandsData?.data || [];
+
   useEffect(() => {
     const newFilters = getFiltersFromURL();
-    if (JSON.stringify(newFilters) !== JSON.stringify(currentFilters)) { setPage(1); setCurrentFilters(newFilters); setCombinedProducts([]); }
+    if (JSON.stringify(newFilters) !== JSON.stringify(currentFilters)) { 
+      setPage(1); 
+      setCurrentFilters(newFilters); 
+      setCombinedProducts([]); 
+    }
   }, [location.search, currentFilters, getFiltersFromURL]);
+
   const queryParams = new URLSearchParams(location.search);
   queryParams.set('page', page);
   const query = queryParams.toString();
-  const { data, isLoading, isFetching, isError, error } = useGetProductsQuery(query);
+
+  // 5. This is still correct: refetch on focus
+  const { data, isLoading, isFetching, isError, error } 
+    = useGetProductsQuery(query, { refetchOnFocus: true });
+
+  // --- 6. UPDATED useEffect: Populates both products AND quantities ---
   useEffect(() => {
     if (data?.data) {
+      const newQuantities = {};
+      data.data.forEach(p => {
+        if (p.cart > 0) {
+          newQuantities[p._id] = p.cart;
+        }
+      });
+      
+      // Merge with existing quantities (in case some are mid-debounce)
+      setCartQuantities(prev => ({ ...prev, ...newQuantities }));
+
       setCombinedProducts(prev => {
         if (page === 1) return data.data;
         const existingIds = new Set(prev.map(p => p._id));
@@ -59,6 +93,8 @@ const ProductPage = () => {
       });
     }
   }, [data, page]);
+
+  // --- Infinite scroll observer (unchanged) ---
   const pagination = data?.pagination;
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
@@ -71,6 +107,8 @@ const ProductPage = () => {
     if (currentLoader) observer.observe(currentLoader);
     return () => { if (currentLoader) observer.unobserve(currentLoader); };
   }, [isFetching, pagination]);
+
+  // --- Filter handlers (unchanged) ---
   const handleApplyFilters = (filters) => {
     const params = new URLSearchParams(location.search);
     const updateParam = (key, value) => { if (value && value.length > 0) { if (Array.isArray(value)) params.set(key, value.join(',')); else params.set(key, value); } else { params.delete(key); } };
@@ -85,22 +123,73 @@ const ProductPage = () => {
     navigate(`/products?${params.toString()}`);
   };
   const currentParams = new URLSearchParams(location.search);
+  
+  // --- 7. NEW CART HANDLERS ---
+  
+  // Passed to ProductCard for the first add
+  const handleInitialAddToCart = (productId) => {
+    const newQuantity = 1;
+    
+    // Optimistic UI update
+    setCartQuantities(prev => ({ ...prev, [productId]: newQuantity }));
 
-  // 3. Add the handler
-  const handleAddToCart = async (productId) => {
-    try {
-      await addOrUpdateItem({ productId, quantity: 1 }).unwrap();
-      console.log('Product added to cart');
-      // You can add a toast notification here
-    } catch (err) {
-      console.error('Failed to add product:', err);
+    // Call API (no debounce for first add)
+    addOrUpdateItem({ productId, quantity: newQuantity })
+      .unwrap()
+      .catch(() => {
+        // Revert on error
+        setCartQuantities(prev => ({ ...prev, [productId]: 0 }));
+      });
+  };
+
+  // Passed to ProductCard for +/- clicks
+  const handleQuantityChange = (productId, newQuantity) => {
+    if (newQuantity < 0) return;
+
+    const oldQuantity = cartQuantities[productId] || 0;
+
+    // Optimistic UI update
+    setCartQuantities(prev => ({ ...prev, [productId]: newQuantity }));
+
+    // Clear existing timer
+    if (debounceTimers.current[productId]) {
+      clearTimeout(debounceTimers.current[productId]);
+    }
+
+    if (newQuantity === 0) {
+      // Delete item (no debounce)
+      deleteItem(productId)
+        .unwrap()
+        .catch(() => {
+          setCartQuantities(prev => ({ ...prev, [productId]: oldQuantity }));
+        });
+    } else {
+      // Update item (with debounce)
+      debounceTimers.current[productId] = setTimeout(() => {
+        addOrUpdateItem({ productId, quantity: newQuantity })
+          .unwrap()
+          .catch(() => {
+            setCartQuantities(prev => ({ ...prev, [productId]: oldQuantity }));
+          });
+      }, 3000); // 3-second debounce
     }
   };
 
   return (
     <div className="relative p-4 md:p-8">
+      {/* --- Filter Bar (unchanged) --- */}
       <div className="flex items-center gap-4 mb-6 overflow-x-auto pb-2">
-        {/* ... (filter bar buttons) ... */}
+        <button onClick={() => setIsFilterOpen(true)} className="flex items-center gap-2 px-4 py-2 border rounded-md whitespace-nowrap">
+          <FiFilter /> Filters
+        </button>
+        <div className="h-full border-l mx-2"></div>
+        <div className="flex items-center gap-2">
+          <QuickFilter onClick={() => handleQuickFilterClick('sortBy', 'popularity')} isActive={currentParams.get('sortBy') === 'popularity'}>Popular</QuickFilter>
+          <QuickFilter onClick={() => handleQuickFilterClick('priceRange', {min: 0, max: 500})} isActive={currentParams.get('minPrice') === '0' && currentParams.get('maxPrice') === '500'}>Under ₹500</QuickFilter>
+          <QuickFilter onClick={() => handleQuickFilterClick('priceRange', {min: 500, max: 1000})} isActive={currentParams.get('minPrice') === '500' && currentParams.get('maxPrice') === '1000'}>₹500-1000</QuickFilter>
+          <QuickFilter onClick={() => handleQuickFilterClick('rating', 4)} isActive={currentParams.get('rating') === '4'}>4+ Rating</QuickFilter>
+          <QuickFilter onClick={() => handleQuickFilterClick('gender', 'female')} isActive={currentParams.get('gender') === 'female'}>Female</QuickFilter>
+        </div>
       </div>
 
       <ProductFilters
@@ -122,11 +211,13 @@ const ProductPage = () => {
         ) : combinedProducts.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
             {combinedProducts.map((product) => (
-              // 4. Pass the handler to the card
+              // 8. Pass new props to ProductCard
               <ProductCard 
                 key={product._id} 
                 product={product} 
-                onAddToCartClick={handleAddToCart} 
+                quantity={cartQuantities[product._id] || 0}
+                onInitialAddToCart={handleInitialAddToCart}
+                onQuantityChange={handleQuantityChange}
               />
             ))}
           </div>

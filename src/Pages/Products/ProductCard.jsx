@@ -1,74 +1,27 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { FiShoppingCart } from "react-icons/fi";
 import { FaPlus, FaMinus } from "react-icons/fa";
-// 1. Import the cart mutation hooks
-import { 
-    useAddOrUpdateItemMutation, 
-    useDeleteItemMutation 
-} from "../../redux/services/cartSlice"; // Adjust path as needed
 
-const ProductCard = ({ product }) => {
-  // 2. Initialize quantity state from product.cart (which comes from the API)
-  const [quantity, setQuantity] = useState(product.cart || 0);
+/**
+ * This is now a "dumb" component. It receives its quantity and event
+ * handlers as props from the parent (Product.jsx).
+ */
+const ProductCard = ({ product, quantity, onQuantityChange, onInitialAddToCart }) => {
 
-  // 3. Initialize mutation hooks
-  const [addOrUpdateItem] = useAddOrUpdateItemMutation();
-  const [deleteItem] = useDeleteItemMutation();
-
-  // 4. Update state if the prop changes (after a refetch)
-  useEffect(() => {
-    setQuantity(product.cart || 0);
-  }, [product.cart]);
-
-  // 5. Create a ref to hold the debounce timer
-  const debounceTimer = useRef(null);
-
-  // 6. Handle the very first "Add to Cart" click
-  const handleInitialAddToCart = (e) => {
+  // Handler for the first click on the cart icon
+  const handleInitialClick = (e) => {
     e.stopPropagation();
     e.preventDefault();
-    
-    const newQuantity = 1;
-    setQuantity(newQuantity); // Optimistic UI update
-    
-    // Call API (no debounce for the first add)
-    addOrUpdateItem({ productId: product._id, quantity: newQuantity })
-      .unwrap()
-      .catch(() => setQuantity(0)); // Revert on error
+    onInitialAddToCart(product._id);
   };
 
-  // 7. Handle quantity changes (+/-) with debounce
-  const handleQuantityChange = (e, amount) => {
+  // Handler for clicks on the '+' or '-' buttons
+  const handleChange = (e, amount) => {
     e.stopPropagation();
     e.preventDefault();
-
-    const oldQuantity = quantity;
-    const newQuantity = oldQuantity + amount;
-
-    if (newQuantity < 0) return;
-
-    // Optimistic UI update
-    setQuantity(newQuantity);
-
-    // Clear any existing timer
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-
-    if (newQuantity === 0) {
-      // If quantity is 0, delete the item (no debounce)
-      deleteItem(product._id)
-        .unwrap()
-        .catch(() => setQuantity(oldQuantity)); // Revert on error
-    } else {
-      // Otherwise, update the item with a 3-second debounce
-      debounceTimer.current = setTimeout(() => {
-        addOrUpdateItem({ productId: product._id, quantity: newQuantity })
-          .unwrap()
-          .catch(() => setQuantity(oldQuantity)); // Revert on error
-      }, 3000); // 3-second debounce
-    }
+    const newQuantity = quantity + amount;
+    onQuantityChange(product._id, newQuantity);
   };
 
   return (
@@ -91,11 +44,11 @@ const ProductCard = ({ product }) => {
         <div className="flex justify-between items-center w-full mt-4">
           <p className="font-semibold text-[#2518BD]">₹{product.price}</p>
           
-          {/* --- 8. CONDITIONAL UI based on new state --- */}
+          {/* --- This UI is now driven by the `quantity` prop --- */}
           {quantity === 0 ? (
             // If quantity is 0, show the "Add to Cart" icon
             <div
-              onClick={handleInitialAddToCart}
+              onClick={handleInitialClick}
               className="bg-[#2518BD] text-white p-3 rounded-full cursor-pointer hover:bg-blue-800 transition-colors"
             >
               <FiShoppingCart size={20} />
@@ -104,14 +57,14 @@ const ProductCard = ({ product }) => {
             // If quantity is > 0, show the quantity selector
             <div className="flex items-center justify-center gap-2 text-[#2518BD]">
               <button
-                onClick={(e) => handleQuantityChange(e, -1)}
+                onClick={(e) => handleChange(e, -1)}
                 className="w-8 h-8 flex items-center justify-center border border-[#2518BD] rounded-full hover:bg-blue-100 transition-colors"
               >
                 <FaMinus size={12} />
               </button>
               <span className="font-bold text-lg w-5 text-center">{quantity}</span>
               <button
-                onClick={(e) => handleQuantityChange(e, 1)}
+                onClick={(e) => handleChange(e, 1)}
                 className="w-8 h-8 flex items-center justify-center border border-[#2518BD] rounded-full hover:bg-blue-100 transition-colors"
               >
                 <FaPlus size={12} />

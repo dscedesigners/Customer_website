@@ -24,7 +24,7 @@ const ContactUs = () => {
   return (
     <div className="bg-[linear-gradient(114.91deg,_#BEE2EF_7.73%,_#73C1DE_103.62%)] text-white">
       {/* Include Nav here */}
-      <Nav />
+      
 
       <div className="container mx-auto px-10 flex flex-col items-center space-y-10 pt-20">
         {/* Header Section */}
